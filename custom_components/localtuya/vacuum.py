@@ -206,7 +206,7 @@ class LocalTuyaVacuum(LocalTuyaEntity, StateVacuumEntity):
 
     async def async_send_command(self, command, params=None, **kwargs):
         """Send a command to a vacuum cleaner."""
-        if command == "set_mode" and "mode" in params:
+        if command == "set_mode" and params and "mode" in params:
             mode = params["mode"]
             await self._device.set_dp(mode, self._config[CONF_MODE_DP])
 

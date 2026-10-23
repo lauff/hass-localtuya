@@ -1,5 +1,7 @@
 """Test for localtuya."""
 
+from unittest.mock import AsyncMock
+
 from . import *
 from custom_components.localtuya.vacuum import (
     LocalTuyaVacuum,
@@ -76,3 +78,13 @@ async def test_vacuum():
 
     device.status_updated({entity_1_cfg["id"]: "standby"})
     assert entity_1.state == VacuumActivity.IDLE
+
+
+async def test_vacuum_send_command_without_params():
+    """send_command("set_mode") without params must not raise."""
+    device = await init(CONFIG, PLATFORM_DOMAIN, LocalTuyaVacuum)
+    entity_1, *_ = get_entites(device)
+    device.set_dp = AsyncMock()
+
+    await entity_1.async_send_command("set_mode")
+    device.set_dp.assert_not_awaited()
