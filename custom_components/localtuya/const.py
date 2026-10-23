@@ -172,6 +172,7 @@ CONF_PAUSED_STATE = "paused_state"
 CONF_RETURN_MODE = "return_mode"
 CONF_STOP_STATUS = "stop_status"
 CONF_PAUSE_DP = "pause_dp"
+CONF_RETURN_HOME_DP = "return_home_dp"
 
 # number
 CONF_MIN_VALUE = "min_value"

@@ -176,6 +176,7 @@
                     "mode_dp": "DP de modo",
                     "modes": "Lista de modos",
                     "return_mode": "Modo volver a base",
+                    "return_home_dp": "Return home DP",
                     "fan_speed_dp": "(Opcional) DP de velocidades del ventilador",
                     "fan_speeds": "Lista de velocidades del ventilador (separadas por comas)",
                     "clean_time_dp": "DP de tiempo de limpieza (normalmente 33)",

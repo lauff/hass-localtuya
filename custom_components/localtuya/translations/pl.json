@@ -176,6 +176,7 @@
                     "mode_dp": "DP trybu",
                     "modes": "Lista trybów",
                     "return_mode": "Tryb powrotu do domu",
+                    "return_home_dp": "Return home DP",
                     "fan_speed_dp": "(Opcjonalnie) DP prędkości wentylatora",
                     "fan_speeds": "Lista prędkości wentylatorów (oddzielone przecinkami)",
                     "clean_time_dp": "DP czasu czyszczenia(zazwyczaj 33)",

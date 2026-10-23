@@ -71,6 +71,7 @@ VACUUMS: dict[str, tuple[LocalTuyaEntity, ...]] = {
             mode_dp=DPCode.MODE,
             fan_speed_dp=DPCode.SUCTION,
             pause_dp=DPCode.PAUSE,
+            return_home_dp=DPCode.SWITCH_CHARGE,
             locate_dp=DPCode.SEEK,
             clean_time_dp=(
                 DPCode.CLEAN_TIME,

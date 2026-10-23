@@ -176,6 +176,7 @@
                     "mode_dp": "模式数据点位",
                     "modes": "模式列表（用英文逗号分隔）",
                     "return_mode": "返回基座模式",
+                    "return_home_dp": "Return home DP",
                     "fan_speed_dp": "（非必填）风速数据点位",
                     "fan_speeds": "风速列表（用英文逗号分隔）",
                     "clean_time_dp": "清洁时间数据点位（通常为33）",

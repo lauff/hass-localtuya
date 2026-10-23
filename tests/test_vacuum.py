@@ -1,5 +1,6 @@
 """Test for localtuya."""
 
+from copy import deepcopy
 from unittest.mock import AsyncMock
 
 from . import *
@@ -7,8 +8,10 @@ from custom_components.localtuya.vacuum import (
     LocalTuyaVacuum,
     DOMAIN as PLATFORM_DOMAIN,
     VacuumActivity,
+    VacuumEntityFeature,
     CONF_MODE_DP,
     CONF_PAUSE_DP,
+    CONF_RETURN_HOME_DP,
 )
 
 CONFIG = {
@@ -88,3 +91,31 @@ async def test_vacuum_send_command_without_params():
 
     await entity_1.async_send_command("set_mode")
     device.set_dp.assert_not_awaited()
+
+
+async def test_vacuum_return_home():
+    """Without return_home_dp, returning home writes return_mode to the mode DP."""
+    device = await init(CONFIG, PLATFORM_DOMAIN, LocalTuyaVacuum)
+    entity_1, *_ = get_entites(device)
+    entity_1_cfg = CONFIG[DEVICE_NAME]["entities"][0]
+    device.set_dp = AsyncMock()
+
+    assert entity_1.supported_features & VacuumEntityFeature.RETURN_HOME
+    await entity_1.async_return_to_base()
+    device.set_dp.assert_awaited_once_with("chargego", entity_1_cfg[CONF_MODE_DP])
+
+
+async def test_vacuum_return_home_dp():
+    """With return_home_dp, returning home writes True to that DP."""
+    config = deepcopy(CONFIG)
+    entity_cfg = config[DEVICE_NAME]["entities"][0]
+    entity_cfg[CONF_RETURN_HOME_DP] = "20"
+    entity_cfg["modes"] = "smart,zone"  # return_mode is not a mode on such devices
+
+    device = await init(config, PLATFORM_DOMAIN, LocalTuyaVacuum)
+    entity_1, *_ = get_entites(device)
+    device.set_dp = AsyncMock()
+
+    assert entity_1.supported_features & VacuumEntityFeature.RETURN_HOME
+    await entity_1.async_return_to_base()
+    device.set_dp.assert_awaited_once_with(True, "20")

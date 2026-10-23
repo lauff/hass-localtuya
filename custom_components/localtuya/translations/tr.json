@@ -176,6 +176,7 @@
           "mode_dp": "Mod DP",
           "modes": "Modlar listesi",
           "return_mode": "Eve dönüş modu",
+          "return_home_dp": "Return home DP",
           "fan_speed_dp": "(Opsiyonel) Fan hızları DP",
           "fan_speeds": "Fan hızları listesi (virgülle ayrılmış)",
           "clean_time_dp": "Temizleme Süresi DP (genellikle 33)",

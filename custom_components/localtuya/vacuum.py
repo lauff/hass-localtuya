@@ -31,6 +31,7 @@ from .const import (
     CONF_RETURNING_STATUS_VALUE,
     CONF_STOP_STATUS,
     CONF_PAUSE_DP,
+    CONF_RETURN_HOME_DP,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -67,6 +68,7 @@ def flow_schema(dps):
         vol.Optional(CONF_MODE_DP): col_to_select(dps, is_dps=True),
         vol.Optional(CONF_MODES, default=DEFAULT_MODES): str,
         vol.Optional(CONF_RETURN_MODE, default=DEFAULT_RETURN_MODE): str,
+        vol.Optional(CONF_RETURN_HOME_DP): col_to_select(dps, is_dps=True),
         vol.Optional(CONF_FAN_SPEED_DP): col_to_select(dps, is_dps=True),
         vol.Optional(CONF_FAN_SPEEDS, default=DEFAULT_FAN_SPEEDS): str,
         vol.Optional(CONF_CLEAN_TIME_DP): col_to_select(dps, is_dps=True),
@@ -126,7 +128,7 @@ class LocalTuyaVacuum(LocalTuyaEntity, StateVacuumEntity):
             | VacuumEntityFeature.STATE
         )
 
-        if (
+        if self.has_config(CONF_RETURN_HOME_DP) or (
             self.has_config(CONF_RETURN_MODE)
             and self._config[CONF_RETURN_MODE] in self._modes_list
         ):
@@ -184,7 +186,9 @@ class LocalTuyaVacuum(LocalTuyaEntity, StateVacuumEntity):
 
     async def async_return_to_base(self, **kwargs):
         """Set the vacuum cleaner to return to the dock."""
-        if self.has_config(CONF_RETURN_MODE):
+        if self.has_config(CONF_RETURN_HOME_DP):
+            await self._device.set_dp(True, self._config[CONF_RETURN_HOME_DP])
+        elif self.has_config(CONF_RETURN_MODE):
             await self._device.set_dp(
                 self._config[CONF_RETURN_MODE], self._config[CONF_MODE_DP]
             )

@@ -78,6 +78,7 @@
                     "mode_dp": "Mode DP (Usually 27)",
                     "modes": "Modes list",
                     "return_mode": "Return home mode",
+                    "return_home_dp": "Return home DP",
                     "fan_speed_dp": "Fan speeds DP (Usually 30)",
                     "fan_speeds": "Fan speeds list (comma-separated)",
                     "clean_time_dp": "Clean Time DP (Usually 33)",
