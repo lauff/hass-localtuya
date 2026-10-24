@@ -181,6 +181,7 @@
           "room_clean_mode": "Room clean mode (written to Mode DP, default CleanModeSectorbased)",
           "rooms_dp": "Room list DP (rooms reported by the vacuum)",
           "rooms": "Rooms (id:name, comma-separated, overrides the room list DP)",
+          "base_station_dp": "Base station DP (tank status, reported while docked)",
           "fan_speed_dp": "(Opsiyonel) Fan hızları DP",
           "fan_speeds": "Fan hızları listesi (virgülle ayrılmış)",
           "clean_time_dp": "Temizleme Süresi DP (genellikle 33)",
