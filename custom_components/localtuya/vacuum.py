@@ -19,6 +19,12 @@ try:  # Home Assistant >= 2026.3
 except ImportError:
     Segment = None
 
+from .core.vacuum_base_station import (
+    BASE_STATION_BUSY,
+    FRESH_WATER_TANK,
+    WASTE_WATER_TANK,
+    decode_base_station,
+)
 from .core.vacuum_rooms import (
     decode_room_list,
     encode_room_clean,
@@ -48,6 +54,7 @@ from .const import (
     CONF_ROOM_CLEAN_MODE,
     CONF_ROOMS_DP,
     CONF_ROOMS,
+    CONF_BASE_STATION_DP,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -59,6 +66,7 @@ MODES_LIST = "cleaning_mode_list"
 MODE = "cleaning_mode"
 FAULT = "fault"
 ROOMS = "rooms"
+BASE_STATION_ATTRS = (FRESH_WATER_TANK, WASTE_WATER_TANK, BASE_STATION_BUSY)
 
 # VacuumEntityFeature.CLEAN_AREA exists since Home Assistant 2026.3
 FEATURE_CLEAN_AREA = getattr(VacuumEntityFeature, "CLEAN_AREA", None)
@@ -104,6 +112,7 @@ def flow_schema(dps):
         vol.Optional(CONF_ROOM_CLEAN_MODE): str,
         vol.Optional(CONF_ROOMS_DP): col_to_select(dps, is_dps=True),
         vol.Optional(CONF_ROOMS): str,
+        vol.Optional(CONF_BASE_STATION_DP): col_to_select(dps, is_dps=True),
     }
 
 
@@ -338,9 +347,14 @@ class LocalTuyaVacuum(LocalTuyaEntity, StateVacuumEntity):
         if rooms := stored_state.attributes.get(ROOMS):
             try:
                 self._device_rooms = {int(i): str(n) for i, n in rooms.items()}
+                self._attrs[ROOMS] = self._rooms_attr()
             except (AttributeError, ValueError):
-                return
-            self._attrs[ROOMS] = self._rooms_attr()
+                pass
+        # The vacuum reports the base station only while docked, keep the last value.
+        if self.has_config(CONF_BASE_STATION_DP):
+            for attr in BASE_STATION_ATTRS:
+                if (value := stored_state.attributes.get(attr)) is not None:
+                    self._attrs[attr] = value
 
     def status_updated(self):
         """Device status was updated."""
@@ -390,6 +404,11 @@ class LocalTuyaVacuum(LocalTuyaEntity, StateVacuumEntity):
                 self._update_rooms(rooms)
         if self.rooms:
             self._attrs[ROOMS] = self._rooms_attr()
+
+        if self.has_config(CONF_BASE_STATION_DP):
+            station = decode_base_station(self.dp_value(CONF_BASE_STATION_DP))
+            if station is not None:
+                self._attrs.update(station)
 
 
 async_setup_entry = partial(async_setup_entry, DOMAIN, LocalTuyaVacuum, flow_schema)

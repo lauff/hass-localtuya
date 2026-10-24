@@ -177,6 +177,7 @@ CONF_ROOM_CLEAN_DP = "room_clean_dp"
 CONF_ROOM_CLEAN_MODE = "room_clean_mode"
 CONF_ROOMS_DP = "rooms_dp"
 CONF_ROOMS = "rooms"
+CONF_BASE_STATION_DP = "base_station_dp"
 
 # number
 CONF_MIN_VALUE = "min_value"

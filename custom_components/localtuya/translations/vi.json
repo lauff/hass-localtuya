@@ -182,6 +182,7 @@
                     "room_clean_mode": "Room clean mode (written to Mode DP, default CleanModeSectorbased)",
                     "rooms_dp": "Room list DP (rooms reported by the vacuum)",
                     "rooms": "Rooms (id:name, comma-separated, overrides the room list DP)",
+                    "base_station_dp": "Base station DP (tank status, reported while docked)",
                     "fan_speed_dp": "(Tùy chọn) DP tốc độ quạt",
                     "fan_speeds": "Danh sách tốc độ quạt (cách nhau bằng dấu phẩy)",
                     "clean_time_dp": "DP thời gian làm sạch (thường là 33)",

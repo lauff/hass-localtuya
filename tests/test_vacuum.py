@@ -4,6 +4,7 @@ from copy import deepcopy
 from unittest.mock import AsyncMock, call
 
 import pytest
+from homeassistant.core import State
 from homeassistant.exceptions import HomeAssistantError
 
 from . import *
@@ -188,3 +189,36 @@ async def test_vacuum_clean_rooms_not_configured():
     with pytest.raises(HomeAssistantError):
         await entity_1.async_clean_rooms([11])
     device.set_dp.assert_not_awaited()
+
+
+async def test_vacuum_base_station():
+    config = deepcopy(CONFIG)
+    config[DEVICE_NAME]["entities"][0]["base_station_dp"] = "158"
+    device = await init(config, PLATFORM_DOMAIN, LocalTuyaVacuum)
+    entity_1, *_ = get_entites(device)
+
+    device.status_updated({**DPS_STATUS, "158": b64("aa00070102000000000003")})
+    attrs = entity_1.extra_state_attributes
+    assert attrs["fresh_water_tank"] == "empty"
+    assert attrs["waste_water_tank"] == "ok"
+    assert attrs["base_station_busy"] is False
+
+    # an invalid frame keeps the last known values
+    device.status_updated({"158": "garbage"})
+    assert entity_1.extra_state_attributes["fresh_water_tank"] == "empty"
+
+
+async def test_vacuum_base_station_restored():
+    config = deepcopy(CONFIG)
+    config[DEVICE_NAME]["entities"][0]["base_station_dp"] = "158"
+    device = await init(config, PLATFORM_DOMAIN, LocalTuyaVacuum)
+    entity_1, *_ = get_entites(device)
+
+    entity_1.status_restored(
+        State(
+            "vacuum.test",
+            "docked",
+            {"fresh_water_tank": "ok", "waste_water_tank": "removed", "rooms": "bad"},
+        )
+    )
+    assert entity_1.extra_state_attributes["waste_water_tank"] == "removed"
