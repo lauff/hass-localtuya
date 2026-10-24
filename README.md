@@ -15,6 +15,9 @@ All changes are opt-in: existing configurations behave exactly as in upstream.
 | **Fix:** `vacuum.send_command` without `params` no longer raises a `TypeError` | `fix/vacuum-send-command-params` | not yet proposed |
 | **Vacuum option "Return home DP":** `return_to_base` writes `True` to this DP (Tuya `switch_charge`) instead of writing a mode | `feat/vacuum-return-home-dp` | not yet proposed |
 | **Clean selected rooms:** Home Assistant "clean by area" (`vacuum.clean_area`, HA ≥ 2026.3) and a `clean_rooms` command; the vacuum entity now also advertises `send_command` | `feat/vacuum-clean-area` | not yet proposed |
+| **Base station status:** option "Base station DP" adds the attributes `fresh_water_tank` (ok / removed / empty), `waste_water_tank` (ok / removed / full*) and `base_station_busy` | `feat/vacuum-base-station` | not yet proposed |
+
+\* `full` is an assumption (not observed yet). The vacuum reports the base station only while docked; the last values are kept.
 
 New vacuum options for room cleaning:
 
@@ -31,10 +34,10 @@ vacuums may use a different format, see [`core/vacuum_rooms.py`](custom_componen
 
 <details><summary>Example: Lefant M5</summary>
 
-Device: protocol 3.5, Manual DPS `2,3,113,183`. Vacuum entity: Status DP 5, Power DP 1, Pause DP 2,
+Device: protocol 3.5, Manual DPS `2,3,113,158,183`. Vacuum entity: Status DP 5, Power DP 1, Pause DP 2,
 Return home DP 3, Mode DP 4 (`smart,CleanModeSectorbased,zone`), Fan speed DP 9
 (`gentle,normal,strong,superStrong`), Clean time DP 16, Clean area DP 17, Fault DP 164,
-Room clean DP 113, Room list DP 183. Map the rooms to areas in the vacuum entity's settings, then:
+Room clean DP 113, Room list DP 183, Base station DP 158. Map the rooms to areas in the vacuum entity's settings, then:
 
 ```yaml
 action: vacuum.clean_area
