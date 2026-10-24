@@ -173,6 +173,10 @@ CONF_RETURN_MODE = "return_mode"
 CONF_STOP_STATUS = "stop_status"
 CONF_PAUSE_DP = "pause_dp"
 CONF_RETURN_HOME_DP = "return_home_dp"
+CONF_ROOM_CLEAN_DP = "room_clean_dp"
+CONF_ROOM_CLEAN_MODE = "room_clean_mode"
+CONF_ROOMS_DP = "rooms_dp"
+CONF_ROOMS = "rooms"
 
 # number
 CONF_MIN_VALUE = "min_value"

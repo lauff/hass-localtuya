@@ -1,9 +1,13 @@
 """Test for localtuya."""
 
 from copy import deepcopy
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, call
+
+import pytest
+from homeassistant.exceptions import HomeAssistantError
 
 from . import *
+from .test_vacuum_rooms import ROOM_LIST, ROOMS, b64
 from custom_components.localtuya.vacuum import (
     LocalTuyaVacuum,
     DOMAIN as PLATFORM_DOMAIN,
@@ -12,6 +16,8 @@ from custom_components.localtuya.vacuum import (
     CONF_MODE_DP,
     CONF_PAUSE_DP,
     CONF_RETURN_HOME_DP,
+    FEATURE_CLEAN_AREA,
+    Segment,
 )
 
 CONFIG = {
@@ -119,3 +125,66 @@ async def test_vacuum_return_home_dp():
     assert entity_1.supported_features & VacuumEntityFeature.RETURN_HOME
     await entity_1.async_return_to_base()
     device.set_dp.assert_awaited_once_with(True, "20")
+
+
+def rooms_config():
+    """Vacuum config with room cleaning (DP numbers of a Lefant M5)."""
+    config = deepcopy(CONFIG)
+    config[DEVICE_NAME]["entities"][0].update(
+        {"room_clean_dp": "113", "rooms_dp": "183", "rooms": "11:Hall"}
+    )
+    return config
+
+
+async def test_vacuum_rooms_from_dp():
+    device = await init(rooms_config(), PLATFORM_DOMAIN, LocalTuyaVacuum)
+    entity_1, *_ = get_entites(device)
+
+    device.status_updated({**DPS_STATUS, "183": ROOM_LIST})
+    # rooms reported by the vacuum, the configured name wins
+    assert entity_1.rooms == {**ROOMS, 11: "Hall"}
+    assert entity_1.extra_state_attributes["rooms"]["7"] == "Flur"
+
+    assert entity_1.supported_features & VacuumEntityFeature.SEND_COMMAND
+    if FEATURE_CLEAN_AREA:
+        assert entity_1.supported_features & FEATURE_CLEAN_AREA
+    if Segment:
+        segments = await entity_1.async_get_segments()
+        assert Segment(id="11", name="Hall") in segments
+        assert len(segments) == len(ROOMS)
+
+
+async def test_vacuum_clean_rooms():
+    device = await init(rooms_config(), PLATFORM_DOMAIN, LocalTuyaVacuum)
+    entity_1, *_ = get_entites(device)
+    device.status_updated({**DPS_STATUS, "183": ROOM_LIST})
+    device.set_dp = AsyncMock()
+
+    # by name (case insensitive) and id, in cleaning order
+    await entity_1.async_send_command("clean_rooms", {"rooms": ["hall", 7]})
+    assert device.set_dp.await_args_list == [
+        call(False, "2"),  # powergo_dp
+        call(b64("aa00051401020b0729"), "113"),  # room frame
+        call("CleanModeSectorbased", "3"),  # mode_dp
+    ]
+
+    device.set_dp.reset_mock()
+    await entity_1.async_clean_segments(["11"])
+    assert device.set_dp.await_args_list[1] == call(b64("aa00041401010b21"), "113")
+
+    with pytest.raises(HomeAssistantError):
+        await entity_1.async_send_command("clean_rooms", {"rooms": ["Kitchen"]})
+    with pytest.raises(HomeAssistantError):
+        await entity_1.async_send_command("clean_rooms")
+
+
+async def test_vacuum_clean_rooms_not_configured():
+    device = await init(CONFIG, PLATFORM_DOMAIN, LocalTuyaVacuum)
+    entity_1, *_ = get_entites(device)
+    device.set_dp = AsyncMock()
+
+    if FEATURE_CLEAN_AREA:
+        assert not entity_1.supported_features & FEATURE_CLEAN_AREA
+    with pytest.raises(HomeAssistantError):
+        await entity_1.async_clean_rooms([11])
+    device.set_dp.assert_not_awaited()

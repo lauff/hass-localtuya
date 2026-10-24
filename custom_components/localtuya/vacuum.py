@@ -1,5 +1,6 @@
 """Platform to locally control Tuya-based vacuum devices."""
 
+import asyncio
 import logging
 from functools import partial
 from .config_flow import col_to_select
@@ -11,7 +12,18 @@ from homeassistant.components.vacuum import (
     VacuumActivity,
     VacuumEntityFeature,
 )
+from homeassistant.exceptions import HomeAssistantError
 
+try:  # Home Assistant >= 2026.3
+    from homeassistant.components.vacuum import Segment
+except ImportError:
+    Segment = None
+
+from .core.vacuum_rooms import (
+    decode_room_list,
+    encode_room_clean,
+    parse_rooms_config,
+)
 from .entity import LocalTuyaEntity, async_setup_entry
 from .const import (
     CONF_CLEAN_AREA_DP,
@@ -32,6 +44,10 @@ from .const import (
     CONF_STOP_STATUS,
     CONF_PAUSE_DP,
     CONF_RETURN_HOME_DP,
+    CONF_ROOM_CLEAN_DP,
+    CONF_ROOM_CLEAN_MODE,
+    CONF_ROOMS_DP,
+    CONF_ROOMS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,6 +58,13 @@ CLEAN_RECORD = "clean_record"
 MODES_LIST = "cleaning_mode_list"
 MODE = "cleaning_mode"
 FAULT = "fault"
+ROOMS = "rooms"
+
+# VacuumEntityFeature.CLEAN_AREA exists since Home Assistant 2026.3
+FEATURE_CLEAN_AREA = getattr(VacuumEntityFeature, "CLEAN_AREA", None)
+COMMAND_CLEAN_ROOMS = "clean_rooms"
+# Delay between the writes of a room clean, the Lefant app uses ~100 ms.
+ROOM_CLEAN_WRITE_DELAY = 0.1
 
 DEFAULT_IDLE_STATUS = "standby,sleep"
 DEFAULT_RETURNING_STATUS = "docking,to_charge,goto_charge"
@@ -51,6 +74,7 @@ DEFAULT_FAN_SPEEDS = "low,normal,high"
 DEFAULT_PAUSED_STATE = "paused"
 DEFAULT_RETURN_MODE = "chargego"
 DEFAULT_STOP_STATUS = "standby"
+DEFAULT_ROOM_CLEAN_MODE = "CleanModeSectorbased"
 
 
 def flow_schema(dps):
@@ -76,6 +100,10 @@ def flow_schema(dps):
         vol.Optional(CONF_CLEAN_RECORD_DP): col_to_select(dps, is_dps=True),
         vol.Optional(CONF_LOCATE_DP): col_to_select(dps, is_dps=True),
         vol.Optional(CONF_FAULT_DP): col_to_select(dps, is_dps=True),
+        vol.Optional(CONF_ROOM_CLEAN_DP): col_to_select(dps, is_dps=True),
+        vol.Optional(CONF_ROOM_CLEAN_MODE): str,
+        vol.Optional(CONF_ROOMS_DP): col_to_select(dps, is_dps=True),
+        vol.Optional(CONF_ROOMS): str,
     }
 
 
@@ -117,6 +145,25 @@ class LocalTuyaVacuum(LocalTuyaEntity, StateVacuumEntity):
         self._fan_speed = ""
         self._cleaning_mode = ""
 
+        # Rooms (segments): reported by the vacuum in rooms_dp, restored from the
+        # last state, or configured by hand in "rooms" (which wins on conflicts).
+        self._device_rooms: dict[int, str] = {}
+        self._config_rooms: dict[int, str] = {}
+        if self.has_config(CONF_ROOMS):
+            try:
+                self._config_rooms = parse_rooms_config(self._config[CONF_ROOMS])
+            except ValueError:
+                self.error(f"Invalid rooms list: {self._config[CONF_ROOMS]}")
+
+    @property
+    def rooms(self) -> dict[int, str]:
+        """Return the known rooms as {room id: name}."""
+        return {**self._device_rooms, **self._config_rooms}
+
+    def _rooms_attr(self) -> dict[str, str]:
+        """Rooms as a state attribute (JSON object keys must be strings)."""
+        return {str(i): name for i, name in self.rooms.items()}
+
     @property
     def supported_features(self) -> VacuumEntityFeature:
         """Flag supported features."""
@@ -137,6 +184,10 @@ class LocalTuyaVacuum(LocalTuyaEntity, StateVacuumEntity):
             supported_features |= VacuumEntityFeature.FAN_SPEED
         if self.has_config(CONF_LOCATE_DP):
             supported_features |= VacuumEntityFeature.LOCATE
+        if self.has_config(CONF_MODE_DP) or self.has_config(CONF_ROOM_CLEAN_DP):
+            supported_features |= VacuumEntityFeature.SEND_COMMAND
+        if FEATURE_CLEAN_AREA and self.has_config(CONF_ROOM_CLEAN_DP):
+            supported_features |= FEATURE_CLEAN_AREA
 
         return supported_features
 
@@ -213,6 +264,83 @@ class LocalTuyaVacuum(LocalTuyaEntity, StateVacuumEntity):
         if command == "set_mode" and params and "mode" in params:
             mode = params["mode"]
             await self._device.set_dp(mode, self._config[CONF_MODE_DP])
+        elif command == COMMAND_CLEAN_ROOMS:
+            rooms = (params or {}).get("rooms") if isinstance(params, dict) else params
+            await self.async_clean_rooms(self._resolve_rooms(rooms))
+
+    async def async_get_segments(self) -> list:
+        """Return the rooms the vacuum knows, for mapping them to areas."""
+        return [Segment(id=str(i), name=name) for i, name in self.rooms.items()]
+
+    async def async_clean_segments(self, segment_ids: list[str], **kwargs) -> None:
+        """Clean the given rooms (called by vacuum.clean_area)."""
+        await self.async_clean_rooms([int(segment_id) for segment_id in segment_ids])
+
+    async def async_clean_rooms(self, room_ids: list[int]) -> None:
+        """Start a room clean: power DP off, room frame, room clean mode."""
+        if not self.has_config(CONF_ROOM_CLEAN_DP):
+            raise HomeAssistantError("Room clean DP is not configured")
+        try:
+            frame = encode_room_clean(room_ids)
+        except ValueError as ex:
+            raise HomeAssistantError(str(ex)) from ex
+
+        mode = self._config.get(CONF_ROOM_CLEAN_MODE) or DEFAULT_ROOM_CLEAN_MODE
+        writes = [(False, self._config[CONF_POWERGO_DP])]
+        writes.append((frame, self._config[CONF_ROOM_CLEAN_DP]))
+        if self.has_config(CONF_MODE_DP):
+            writes.append((mode, self._config[CONF_MODE_DP]))
+
+        self.debug(f"Cleaning rooms {room_ids}: {writes}")
+        for i, (value, dp) in enumerate(writes):
+            if i:
+                await asyncio.sleep(ROOM_CLEAN_WRITE_DELAY)
+            await self._device.set_dp(value, dp)
+
+    def _resolve_rooms(self, rooms) -> list[int]:
+        """Turn room ids or names (or a comma-separated string) into ids."""
+        if isinstance(rooms, (str, int)):
+            rooms = str(rooms).split(",")
+        if not rooms:
+            raise HomeAssistantError('clean_rooms needs params: {"rooms": [ids]}')
+
+        by_name = {name.casefold(): i for i, name in self.rooms.items()}
+        room_ids = []
+        for room in rooms:
+            room = str(room).strip()
+            if room.isdigit():
+                room_ids.append(int(room))
+            elif room.casefold() in by_name:
+                room_ids.append(by_name[room.casefold()])
+            else:
+                raise HomeAssistantError(f"Unknown room: {room}")
+        return room_ids
+
+    def _update_rooms(self, rooms: dict[int, str]) -> None:
+        """Store rooms reported by the vacuum, raise a repair if the map changed."""
+        if rooms == self._device_rooms:
+            return
+        self._device_rooms = rooms
+        self._attrs[ROOMS] = self._rooms_attr()
+
+        if not FEATURE_CLEAN_AREA or self.registry_entry is None:
+            return
+        last_seen = self.last_seen_segments
+        if last_seen is not None:
+            seen = {(segment.id, segment.name) for segment in last_seen}
+            now = {(str(i), name) for i, name in self.rooms.items()}
+            if seen != now:
+                self.async_create_segments_issue()
+
+    def status_restored(self, stored_state):
+        """Restore the rooms reported before a restart."""
+        super().status_restored(stored_state)
+        if rooms := stored_state.attributes.get(ROOMS):
+            try:
+                self._device_rooms = {int(i): str(n) for i, n in rooms.items()}
+            except (AttributeError, ValueError):
+                return
+            self._attrs[ROOMS] = self._rooms_attr()
 
     def status_updated(self):
         """Device status was updated."""
@@ -255,6 +383,13 @@ class LocalTuyaVacuum(LocalTuyaEntity, StateVacuumEntity):
             self._attrs[FAULT] = self.dp_value(CONF_FAULT_DP)
             if self._attrs[FAULT] != 0:
                 self._state = VacuumActivity.ERROR
+
+        if self.has_config(CONF_ROOMS_DP):
+            rooms = decode_room_list(self.dp_value(CONF_ROOMS_DP))
+            if rooms is not None:
+                self._update_rooms(rooms)
+        if self.rooms:
+            self._attrs[ROOMS] = self._rooms_attr()
 
 
 async_setup_entry = partial(async_setup_entry, DOMAIN, LocalTuyaVacuum, flow_schema)
