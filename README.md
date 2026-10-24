@@ -1,3 +1,75 @@
+> [!NOTE]
+> **This is a personal fork of [xZetsubou/hass-localtuya](https://github.com/xZetsubou/hass-localtuya).**
+> It is not maintained by or affiliated with the upstream project. It follows upstream `master` and adds
+> a few vacuum improvements, developed and tested with a **Lefant M5** robot vacuum. Changes intended for
+> upstream are offered there as pull requests. For everything else, use the upstream integration and its
+> documentation and issue tracker.
+
+## Changes in this fork
+
+Modified by [lauff](https://github.com/lauff), October 2026 (see the commit history for details).
+All changes are opt-in: existing configurations behave exactly as in upstream.
+
+| Change | Branch | Upstream |
+|---|---|---|
+| **Fix:** `vacuum.send_command` without `params` no longer raises a `TypeError` | `fix/vacuum-send-command-params` | not yet proposed |
+| **Vacuum option "Return home DP":** `return_to_base` writes `True` to this DP (Tuya `switch_charge`) instead of writing a mode | `feat/vacuum-return-home-dp` | not yet proposed |
+| **Clean selected rooms:** Home Assistant "clean by area" (`vacuum.clean_area`, HA ≥ 2026.3) and a `clean_rooms` command; the vacuum entity now also advertises `send_command` | `feat/vacuum-clean-area` | not yet proposed |
+
+New vacuum options for room cleaning:
+
+| Option | Meaning |
+|---|---|
+| Room clean DP | DP the room frame is written to; enables room cleaning |
+| Room clean mode | value written to the Mode DP after the frame (default `CleanModeSectorbased`) |
+| Room list DP | DP in which the vacuum reports its rooms (id and name) |
+| Rooms | `id:name,id:name,...`, fallback and name override for the room list |
+
+A room clean writes, about 100 ms apart: Power DP = `False`, the room frame, then the room clean mode.
+The room frame format (`aa 00 LEN 14 01 COUNT IDS... CHK`) was captured from the Lefant app. Other
+vacuums may use a different format, see [`core/vacuum_rooms.py`](custom_components/localtuya/core/vacuum_rooms.py).
+
+<details><summary>Example: Lefant M5</summary>
+
+Device: protocol 3.5, Manual DPS `2,3,113,183`. Vacuum entity: Status DP 5, Power DP 1, Pause DP 2,
+Return home DP 3, Mode DP 4 (`smart,CleanModeSectorbased,zone`), Fan speed DP 9
+(`gentle,normal,strong,superStrong`), Clean time DP 16, Clean area DP 17, Fault DP 164,
+Room clean DP 113, Room list DP 183. Map the rooms to areas in the vacuum entity's settings, then:
+
+```yaml
+action: vacuum.clean_area
+target:
+  entity_id: vacuum.lefant_m5
+data:
+  cleaning_area_id: [hall, floor]
+```
+
+or, without area mapping:
+
+```yaml
+action: vacuum.send_command
+target:
+  entity_id: vacuum.lefant_m5
+data:
+  command: clean_rooms
+  params:
+    rooms: [Hall, 7]   # room names or ids, in cleaning order
+```
+</details>
+
+### Installing this fork
+
+In HACS remove the upstream "Local Tuya" repository (keep the integration and its devices), then add
+`https://github.com/lauff/hass-localtuya` as a custom repository of type *Integration*, install it and
+restart Home Assistant. Both use the domain `localtuya`, so existing devices and entities are kept.
+Back up Home Assistant first. To go back, do the same with the upstream repository.
+
+[![Open this fork in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?category=integration&repository=hass-localtuya&owner=lauff)
+
+---
+
+*Original upstream README:*
+
 <a  href="https://www.buymeacoffee.com/mrbanderx3"  target="_blank"><img  src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png"  alt="Buy Me A Coffee"  style="height: 30px !important;width: 150px !important;box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;-webkit-box-shadow: 0px 3px 2px 0px rgba(190, 190, 190, 0.5) !important;" ></a>
 
 ---
